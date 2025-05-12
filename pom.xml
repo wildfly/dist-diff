@@ -134,7 +134,7 @@
     </distributionManagement>
 
     <scm>
-        <developerConnection>scm:git:<!--TODO placeholder for upstream URL--></developerConnection>
+        <developerConnection>scm:git:git@github.com:wildfly/dist-diff.git</developerConnection>
         <tag>HEAD</tag>
     </scm>
 
