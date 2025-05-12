@@ -1,0 +1,17 @@
+target/
+output/
+.project
+.idea/
+.settings/
+*.zip
+*.iml
+*.log
+*.log.*
+docker/docker-output
+docker/output
+docker/reports
+
+pom.xml.next
+pom.xml.releaseBackup
+pom.xml.tag
+release.properties

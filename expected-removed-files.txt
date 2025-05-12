@@ -1,0 +1,2 @@
+# here, list the files which are expected to be REMOVED (present only in distribution A) - relative paths, each on a separate line
+# comments start with a # and are ignored

@@ -1,0 +1,2 @@
+ignored2
+ignorednested2/ignorednested_dir2

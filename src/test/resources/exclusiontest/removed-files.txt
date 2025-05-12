@@ -1,0 +1,3 @@
+removed_file
+listed_as_removed_but_not_found
+glob_rem*

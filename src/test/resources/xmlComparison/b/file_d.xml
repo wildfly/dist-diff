@@ -1,0 +1,9 @@
+<!-- Same content but different order of the elements -->
+<root>
+    <b>gadf</b>
+    <a>qewrqe</a>
+    <c>
+        <e>asdf</e>
+        <f>erds</f>
+    </c>
+</root>

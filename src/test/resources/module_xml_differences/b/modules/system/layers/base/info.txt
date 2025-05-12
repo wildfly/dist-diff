@@ -1,0 +1,4 @@
+This `modules.system.layers.base` directory structure is created only to mimic actual base layer in the real distribution.
+
+If not present the Dist-Diff will complain with Error message together with an IllegalStateException that there are no
+layers definition in the distribution. We don't want such Error message and exceptions in our tests runs to avoid confusion.

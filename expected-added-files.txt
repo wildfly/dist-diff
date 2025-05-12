@@ -1,0 +1,2 @@
+# here, list the files which are expected to be ADDED (present only in distribution B) - relative paths, each on a separate line
+# comments start with a # and are ignored

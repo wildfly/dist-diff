@@ -1,0 +1,3 @@
+# here, list the files which are expected to be different between distributions A and B and it shouldn't be treated as an error
+# list relative paths, each on a separate line
+# comments start with a # and are ignored

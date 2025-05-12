@@ -1,0 +1,9 @@
+<!-- Same comment different content -->
+<root>
+    <a>qewrqe</a>
+    <b>gadf</b>
+    <c>
+        <e>asdf</e>
+        <f>erds</f>
+    </c>
+</root>

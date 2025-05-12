@@ -1,0 +1,9 @@
+<!-- Different content and different order of the elements with element parameters -->
+<root>
+    <a>qewrqe</a>
+    <b>gadf</b>
+    <c>
+        <f name="hi">erds</f>
+        <f name="bye">erds</f>
+    </c>
+</root>

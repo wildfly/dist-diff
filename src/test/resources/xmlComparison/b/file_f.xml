@@ -1,0 +1,9 @@
+<!-- Different content and different order of the elements -->
+<root>
+    <a>qewrqe</a>
+    <b>gadf</b>
+    <c>
+        <f>erds</f>
+        <e>Different content</e>
+    </c>
+</root>

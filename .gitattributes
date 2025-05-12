@@ -1,0 +1,2 @@
+src/test/resources/fileanalysis/linebreaks/XMLSchema.dtd.unix eol=lf
+src/test/resources/fileanalysis/linebreaks/XMLSchema.dtd.windows eol=crlf
