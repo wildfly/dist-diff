@@ -4,7 +4,7 @@
     <groupId>org.wildfly.qa</groupId>
     <artifactId>dist-diff2</artifactId>
     <name>dist-diff2</name>
-    <version>1.0.11-SNAPSHOT</version>
+    <version>1.0.10-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <properties>
