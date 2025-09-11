@@ -169,5 +169,5 @@ Distribution is copied as `dist-diff2-$VERSION-jar-with-dependencies.jar` into y
 Please note that the prerequisite is to have read/write permission to the repo configured in `pom.xml` `scm` tag.
 
 1. `mvn release:clean`
-2. `mvn release:prepare -Pgpg-sign` — if the process fails here, revert using `mvn release:rollback`. Note that the `gpg-agent` must be running and your passphrase must be cached after running e.g. `gpg --sign --detach-sign <file>`.
-3. `mvn release:perform`
+2. `mvn release:prepare` — if the process fails here, revert using `mvn release:rollback`.
+3. `mvn release:perform` — note that the `gpg-agent` must be running and your passphrase must be cached after running e.g. `gpg --sign --detach-sign <file>`.
