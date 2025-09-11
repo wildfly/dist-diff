@@ -1,0 +1,16 @@
+# Check that all commits contain "Signed-off-by" to certify that a contributor has the right to submit their code according to the Developer Certificate of Origin (DCO)
+name: DCO
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+jobs:
+  check_dco:
+    runs-on: ubuntu-latest
+    name: Check DCO
+    steps:
+      - name: Run dco-check
+        uses: christophebedard/dco-check@0.5.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
