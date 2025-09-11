@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 jobs:
   check_dco:
     runs-on: ubuntu-latest
