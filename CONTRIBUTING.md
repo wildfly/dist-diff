@@ -77,20 +77,7 @@ Short summary of what this PR does.
 
 ## Commit message format and sign-off
 
-- Write clear commit messages: a short summary line (~50 chars max) and optional detailed description in the body.
-- Sign your commits using the Developer Certificate of Origin (DCO):
-
-```bash
-git commit -s
-```
-
-This adds a line such as:
-
-```
-Signed-off-by: Your Name <you@example.org>
-```
-
-Adding this line indicates that you agree to the terms described in [`dco.txt`](dco.txt).
+Write clear commit messages: a short summary line (~50 chars max) and optional detailed description in the body.
 
 ## Code style and quality checks
 
