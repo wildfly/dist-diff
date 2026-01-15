@@ -1,13 +1,20 @@
 package org.wildfly.qa.distdiff2.artifacts;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
+import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlTransient;
 import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
 import org.wildfly.qa.distdiff2.helpers.AdaptorCDATA;
 import org.wildfly.qa.distdiff2.results.Status;
+import org.wildfly.qa.distdiff2.results.StatusChange;
 
 /**
  * Artifact
@@ -28,6 +35,10 @@ public abstract class Artifact {
 
     @XmlAttribute(name = "status")
     private Status status;
+
+    @XmlElementWrapper(name = "status-history")
+    @XmlElement(name = "status-change")
+    private List<StatusChange> statusHistory = new ArrayList<>();
 
     @XmlTransient
     private Artifact parent;
@@ -79,8 +90,49 @@ public abstract class Artifact {
         return status;
     }
 
+    /**
+     * Sets the artifact status without tracking history details.
+     * This is a backward-compatible version that records the change with "Unknown" as the phase name.
+     *
+     * @param status The new status
+     */
     public void setStatus(Status status) {
-        this.status = status;
+        setStatus(status, "Unknown", "No reason provided");
+    }
+
+    /**
+     * Sets the artifact status and records the change in the status history.
+     * This method should be used by all phases to ensure complete audit trail.
+     *
+     * <p>The status change is only recorded if the new status differs from the current status,
+     * avoiding unnecessary noise in the history.
+     *
+     * @param newStatus The new status to set
+     * @param phaseName The name of the phase making this change (e.g., "MD5SumsPhase")
+     * @param reason Human-readable explanation of why the status changed
+     */
+    public void setStatus(Status newStatus, String phaseName, String reason) {
+        if (this.status != newStatus) {
+            StatusChange change = new StatusChange(
+                    this.status,
+                    newStatus,
+                    phaseName,
+                    System.currentTimeMillis(),
+                    reason
+            );
+            statusHistory.add(change);
+            this.status = newStatus;
+        }
+    }
+
+    /**
+     * Gets the complete status history for this artifact.
+     * The history shows how the artifact's status evolved through different processing phases.
+     *
+     * @return An unmodifiable list of status changes in chronological order
+     */
+    public List<StatusChange> getStatusHistory() {
+        return Collections.unmodifiableList(statusHistory);
     }
 
     public Artifact getParent() {

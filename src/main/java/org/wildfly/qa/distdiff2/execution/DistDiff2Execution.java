@@ -45,7 +45,7 @@ public class DistDiff2Execution {
         artifactList.addAll(Tools.walkThroughList(filesA, filesB, Status.REMOVED));
         artifactList.addAll(Tools.walkThroughList(filesB, filesA, Status.ADDED));
         for (Artifact artifact : filesA) {
-            artifact.setStatus(Status.SAME);
+            artifact.setStatus(Status.SAME, "InitialComparison", "File exists in both distributions");
             artifact.setPathB(distDiffConfiguration.getFolderB().getAbsolutePath() + File.separator + artifact
                     .getRelativePath());
             artifactList.add(artifact);

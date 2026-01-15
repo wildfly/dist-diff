@@ -18,18 +18,71 @@ import org.wildfly.qa.distdiff2.tools.LineBreakStyle;
 import org.wildfly.qa.distdiff2.tools.Tools;
 
 /**
- * TextFilesDiffsPhase
- * <p>
- * Implementation of {@link ProcessPhase}, calculates differences between text files. It
- * includes artifacts according to following rules:
+ * TextFilesDiffsPhase - Text File Content Comparison Phase
+ *
+ * <h3>Purpose</h3>
+ * This phase performs detailed content comparison of text files that have been
+ * identified as different by MD5 comparison. It generates human-readable diffs
+ * and detects special cases like line-ending differences or expected changes.
+ *
+ * <h3>Processing Logic</h3>
+ * <ol>
+ *   <li><b>Eligible Artifacts</b>: Only processes {@link FileArtifact} instances that:
+ *     <ul>
+ *       <li>Are text files (detected via {@link Tools#isTextFile(String)})</li>
+ *       <li>Have status: EXPECTED_DIFFERENCES, DIFFERENT, PATCHED_WRONG, or VERSION</li>
+ *       <li>Exist in both distributions (pathA and pathB not null)</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Diff Generation</b>: Uses DiffMatchPatch algorithm to:
+ *     <ul>
+ *       <li>Calculate character-level differences between files</li>
+ *       <li>Apply semantic cleanup to merge related changes</li>
+ *       <li>Generate HTML-formatted diff for report</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Line Break Detection</b>: Detects CRLF vs LF differences:
+ *     <ul>
+ *       <li>If files differ ONLY in line endings → {@link Status#DIFFERENT_LINE_BREAKS}</li>
+ *       <li>Helps distinguish platform differences from real content changes</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Special Handling for module.xml</b>:
+ *     <ul>
+ *       <li><b>RPM Mode</b>: Validates version stripping (e.g., "4.2.4.Final-redhat-1" removal)</li>
+ *       <li><b>Custom Build Mode</b>: Validates SNAPSHOT ↔ version-number changes</li>
+ *       <li>If only expected patterns found → EXPECTED_DIFFERENCES</li>
+ *       <li>If unexpected changes found → DIFFERENT</li>
+ *     </ul>
+ *   </li>
+ * </ol>
+ *
+ * <h3>Status Transitions</h3>
+ * <table border="1">
+ *   <caption>Status transitions based on diff analysis</caption>
+ *   <tr><th>From Status</th><th>Condition</th><th>To Status</th></tr>
+ *   <tr><td>DIFFERENT</td><td>Only CRLF/LF differences</td><td>DIFFERENT_LINE_BREAKS</td></tr>
+ *   <tr><td>EXPECTED_DIFFERENCES</td><td>module.xml with unexpected changes (RPM mode)</td><td>DIFFERENT</td></tr>
+ *   <tr><td>DIFFERENT</td><td>module.xml with only expected changes (custom build)</td><td>EXPECTED_DIFFERENCES</td></tr>
+ *   <tr><td>Any processable</td><td>Error during diff generation</td><td>ERROR</td></tr>
+ * </table>
+ *
+ * <h3>Configuration Impact</h3>
  * <ul>
- * <li>items which are {@link FileArtifact}</li>
- * <li>are text files in both A and B paths</li>
- * <li>are in one of the following status: {@link Status#EXPECTED_DIFFERENCES}, {@link
- * Status#DIFFERENT}, {@link Status#PATCHED_WRONG} or
- * {@link Status#VERSION}. Thus one has to execute {@link
- * MD5SumsPhase} first so the different artifacts are identified.</li>
+ *   <li><code>rpmAware</code>: Enables module.xml version-stripping validation</li>
+ *   <li><code>fromSources</code>: Enables custom build SNAPSHOT validation</li>
  * </ul>
+ *
+ * <h3>Dependencies</h3>
+ * <ul>
+ *   <li>Must run AFTER MD5SumsPhase (needs DIFFERENT artifacts)</li>
+ *   <li>Must run AFTER JarVersionComparePhase (processes VERSION artifacts)</li>
+ * </ul>
+ *
+ * @see FileArtifact
+ * @see Status
+ * @see ProcessPhase
+ * @see DiffMatchPatch
  */
 public class TextFilesDiffsPhase extends ProcessPhase {
 
@@ -84,8 +137,9 @@ public class TextFilesDiffsPhase extends ProcessPhase {
                     case EQUAL:
                         continue;
                     case INSERT:
-                        LOGGER.info("Found unexpected addition in module.xml: '" + diff.text + "'");
-                        artifact.setStatus(Status.DIFFERENT);
+                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Found unexpected addition in module.xml: '" + diff.text + "'");
+                        artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
+                            "Unexpected content addition in module.xml (RPM mode): '" + diff.text + "'");
                         break;
                     case DELETE:
                         // if the diffing text matches a 'sane' pattern of a version removal
@@ -93,8 +147,9 @@ public class TextFilesDiffsPhase extends ProcessPhase {
                         if (diff.text.matches("-?[0-9.a-zA-Z-_]+[.-]redhat-[0-9]+-?")) {
                             LOGGER.trace("Version strip in module.xml: '" + diff.text + "'");
                         } else {
-                            LOGGER.trace("Deletion in module.xml: '" + diff.text + "'");
-                            artifact.setStatus(Status.DIFFERENT);
+                            LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Unexpected deletion in module.xml: '" + diff.text + "'");
+                            artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
+                                "Unexpected content deletion in module.xml (RPM mode): '" + diff.text + "'");
                         }
                         break;
                     default:
@@ -160,8 +215,9 @@ public class TextFilesDiffsPhase extends ProcessPhase {
                 i++;
             }
             if (onlyExpected) {
-                LOGGER.debug(artifact.getRelativePath() + " seems to contain expected differences only");
-                artifact.setStatus(Status.EXPECTED_DIFFERENCES);
+                LOGGER.info("Artifact '" + artifact.getRelativePath() + "': module.xml contains only expected SNAPSHOT/version differences");
+                artifact.setStatus(Status.EXPECTED_DIFFERENCES, this.getClass().getSimpleName(),
+                    "module.xml contains only expected redhat-SNAPSHOT to redhat-N version changes");
             }
         }
     }
@@ -219,7 +275,9 @@ public class TextFilesDiffsPhase extends ProcessPhase {
                         artifact.setTextDiff(diff_prettyHtml);
                     }
                     if (isDiffOfFileWithOnlyDifferentLineBreaks(diffs)) {
-                        artifact.setStatus(Status.DIFFERENT_LINE_BREAKS);
+                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Only line break differences detected");
+                        artifact.setStatus(Status.DIFFERENT_LINE_BREAKS, this.getClass().getSimpleName(),
+                            "Files differ only in line break style (CRLF vs LF)");
                     }
                 } else {
                     artifact.setTextDiff(lineBreaksMessage);
@@ -228,8 +286,8 @@ public class TextFilesDiffsPhase extends ProcessPhase {
                 manageModuleXml(artifact, diffs);
                 manageModuleXmlCustomBuild(artifact, diffs);
             } catch (Exception e) {
-                LOGGER.error(e.getMessage(), e);
-                artifact.setStatus(Status.ERROR);
+                LOGGER.error("Artifact '" + artifact.getRelativePath() + "': Error calculating diff - " + e.getMessage(), e);
+                artifact.setStatus(Status.ERROR, this.getClass().getSimpleName(), "Error calculating diff: " + e.getMessage());
             }
         }
     }

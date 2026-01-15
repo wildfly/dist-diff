@@ -24,9 +24,81 @@ import java.util.Set;
 
 
 /**
- * Processes file permission differences between distributions
- * Supports generic permissions and POSIX permissions on supported filesystems
+ * PermissionDiffPhase - File Permission Comparison Phase
  *
+ * <h3>Purpose</h3>
+ * This phase compares file permissions between distributions to detect permission changes.
+ * It supports both POSIX permissions (rwx style) on Unix-like systems and generic permissions
+ * on filesystems that don't support POSIX attributes.
+ *
+ * <h3>Processing Logic</h3>
+ * <ol>
+ *   <li><b>Filesystem Detection</b>: Determines if the filesystem supports POSIX permissions
+ *     <ul>
+ *       <li>POSIX filesystems: Use PosixFilePermission (rwxr-xr-x style)</li>
+ *       <li>Non-POSIX filesystems: Use generic readable/writable/executable checks</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Permission Comparison</b>: Compares permissions for files in both distributions
+ *     <ul>
+ *       <li>Read permission attributes from both files</li>
+ *       <li>Compare permission sets</li>
+ *       <li>Record differences if permissions don't match</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Status Update</b>: Only updates status if artifact was previously SAME
+ *     <ul>
+ *       <li>Sets permissionDiffOnly flag to indicate only permissions changed</li>
+ *       <li>Changes status from SAME to DIFFERENT</li>
+ *       <li>Note: This relies on being executed as one of the last phases</li>
+ *     </ul>
+ *   </li>
+ * </ol>
+ *
+ * <h3>Status Transitions</h3>
+ * <table border="1">
+ *   <caption>Status transitions based on permission analysis</caption>
+ *   <tr><th>From Status</th><th>Condition</th><th>To Status</th></tr>
+ *   <tr><td>SAME</td><td>Permissions differ</td><td>DIFFERENT (with permissionDiffOnly=true)</td></tr>
+ *   <tr><td>Any other status</td><td>Permissions differ</td><td>No change (already marked different)</td></tr>
+ * </table>
+ *
+ * <h3>Permission Types</h3>
+ * <ul>
+ *   <li><b>POSIX Permissions</b>: Standard Unix permissions (owner, group, others)
+ *     <ul>
+ *       <li>Read (r), Write (w), Execute (x) for each category</li>
+ *       <li>Example: rwxr-xr-x (755)</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Generic Permissions</b>: Basic file attributes on non-POSIX systems
+ *     <ul>
+ *       <li>Readable, Writable, Executable flags</li>
+ *       <li>Used on Windows and other non-Unix filesystems</li>
+ *     </ul>
+ *   </li>
+ * </ul>
+ *
+ * <h3>Configuration Impact</h3>
+ * <ul>
+ *   <li><code>-f / --permissions</code>: Must be enabled for this phase to run</li>
+ * </ul>
+ *
+ * <h3>Dependencies</h3>
+ * <ul>
+ *   <li>Should run LATE in the phase pipeline (after content comparison phases)</li>
+ *   <li>Only modifies SAME artifacts, so other phases must run first</li>
+ * </ul>
+ *
+ * <h3>Important Notes</h3>
+ * <ul>
+ *   <li>The status update logic assumes this phase runs near the end of the pipeline</li>
+ *   <li>If run early, permission differences on already-DIFFERENT files won't be captured</li>
+ *   <li>The permissionDiffOnly flag helps distinguish pure permission changes from content changes</li>
+ * </ul>
+ *
+ * @see Status
+ * @see ProcessPhase
  * @author Martin Schvarcbacher
  */
 public final class PermissionDiffPhase extends ProcessPhase {
@@ -111,13 +183,16 @@ public final class PermissionDiffPhase extends ProcessPhase {
         }
 
         if (!permissionsA.equals(permissionsB)) {
+            LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Permission differences detected (A=" + permissionsA.getPermissions() + ", B=" + permissionsB.getPermissions() + ")");
             artifact.setPermissionDiff("A: " + permissionsA.getPermissions() + lineSeparator +
                     "B: " + permissionsB.getPermissions());
             if (artifact.getStatus() == Status.SAME) {
                 // WARNING: this set is quite tricky as it does not have to work in case when
                 // PermissionDiffPhase is not executed as a last of the diffing phases!
+                LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Marking as DIFFERENT (permission-only difference)");
                 artifact.setPermissionDiffOnly(true);
-                artifact.setStatus(Status.DIFFERENT);
+                artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
+                    "Permissions differ (A: " + permissionsA.getPermissions() + ", B: " + permissionsB.getPermissions() + ")");
             }
         }
     }

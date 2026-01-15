@@ -18,24 +18,137 @@ import org.wildfly.qa.distdiff2.tools.DistDiffsDiffMatchPatch;
 import org.wildfly.qa.distdiff2.tools.Tools;
 
 /**
- * This class implements phase for comparing binary executable files in case they differ somehow. By binary
- * executable we mean only executable files and static and dynamic libraries. We don't mean archives or compressed
- * files (.zip, .gzip, .tar, .jar,...), pictures (.png, .bmp,...). What we want is to compare compiled binary files
- * to see their differences in machine source code.
- * <p>
- * Implementation of {@link ProcessPhase}, calculates differences between binary files.
- * It includes artifacts according following rules:
+ * BinaryFilesDiffsPhase - Binary Executable File Comparison Phase
+ *
+ * <h3>Purpose</h3>
+ * This phase compares binary executable files (native libraries, executables) by decompiling
+ * them with objdump and comparing the resulting assembly code. This provides insight into
+ * machine-level differences in compiled code.
+ *
+ * <h3>Scope</h3>
+ * <p><b>Binary executables this phase handles:</b>
  * <ul>
- * <li>items which are {@link FileArtifact}</li>
- * <li>{@link Status#EXPECTED_DIFFERENCES} status</li>
- * <li>{@link Status#DIFFERENT} status</li>
- * <li>{@link Status#PATCHED_WRONG} status</li>
- * <li>{@link Status#VERSION} status</li>
- * <li>its mime-type is 'application/x-sharedlib'</li>
+ *   <li>Executable files (ELF binaries on Linux)</li>
+ *   <li>Shared libraries (.so files)</li>
+ *   <li>Static libraries (.a files)</li>
  * </ul>
- * To be able to compare two binary files, we have to decompile them first. For this we call native command 'objdump'.
- * This way we get binary representation in readable form - symbol tables and instructions of the binary. These
- * results are then compared against each other.
+ *
+ * <p><b>NOT handled by this phase:</b>
+ * <ul>
+ *   <li>Archive files (.zip, .tar, .gz, .jar)</li>
+ *   <li>Image files (.png, .jpg, .bmp)</li>
+ *   <li>Java bytecode (.class files - handled by JarDiffPhase)</li>
+ * </ul>
+ *
+ * <h3>Processing Logic</h3>
+ * <ol>
+ *   <li><b>Platform Check</b>: Only runs on Linux (requires objdump utility)
+ *     <ul>
+ *       <li>Gracefully skips on non-Linux platforms</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Eligible Artifacts</b>: Only processes {@link FileArtifact} instances that:
+ *     <ul>
+ *       <li>Are binary executables (MIME type: application/x-sharedlib or x-executable)</li>
+ *       <li>Have status: EXPECTED_DIFFERENCES, DIFFERENT, PATCHED_WRONG, or VERSION</li>
+ *       <li>Exist in both distributions</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Decompilation</b>: Uses objdump to decompile binaries
+ *     <ul>
+ *       <li><b>Instruction Mode</b> (-C flag): Only compares instruction tables
+ *         <ul>
+ *           <li>Command: {@code objdump --disassemble}</li>
+ *           <li>Faster, focuses on actual code differences</li>
+ *         </ul>
+ *       </li>
+ *       <li><b>Full Mode</b> (default -c flag): Compares all binary content
+ *         <ul>
+ *           <li>Command: {@code objdump --all-headers --disassemble-all}</li>
+ *           <li>More thorough, includes headers and data sections</li>
+ *         </ul>
+ *       </li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Diff Comparison</b>: Compares decompiled outputs
+ *     <ul>
+ *       <li>Uses DiffMatchPatch for character-level comparison</li>
+ *       <li>Generates HTML-formatted diff for report</li>
+ *       <li>Truncates very large diffs (>200,000 chars) to keep report size manageable</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Status Update</b>:
+ *     <ul>
+ *       <li>If decompiled outputs are identical → SAME</li>
+ *       <li>If decompiled outputs differ → DIFFERENT</li>
+ *     </ul>
+ *   </li>
+ * </ol>
+ *
+ * <h3>Status Transitions</h3>
+ * <table border="1">
+ *   <caption>Status transitions based on binary comparison</caption>
+ *   <tr><th>From Status</th><th>Condition</th><th>To Status</th></tr>
+ *   <tr><td>DIFFERENT</td><td>Decompiled binaries identical</td><td>SAME</td></tr>
+ *   <tr><td>DIFFERENT</td><td>Decompiled binaries differ</td><td>No change (remains DIFFERENT)</td></tr>
+ *   <tr><td>VERSION</td><td>Decompiled binaries identical</td><td>SAME</td></tr>
+ *   <tr><td>VERSION</td><td>Decompiled binaries differ</td><td>No change (remains VERSION)</td></tr>
+ *   <tr><td>Any</td><td>objdump execution fails</td><td>ERROR</td></tr>
+ * </table>
+ *
+ * <h3>Comparison Modes</h3>
+ * <ul>
+ *   <li><b>Instruction Mode</b> (-C / --binary-comparison-instruction):
+ *     <ul>
+ *       <li>Compares only instruction sections</li>
+ *       <li>Faster execution</li>
+ *       <li>Best for detecting actual code changes</li>
+ *       <li>May miss header or metadata changes</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Full Mode</b> (-c / --binary-comparison):
+ *     <ul>
+ *       <li>Compares entire binary content</li>
+ *       <li>Slower execution</li>
+ *       <li>Detects all changes including headers, symbols, debug info</li>
+ *       <li>More comprehensive but may report non-functional differences</li>
+ *     </ul>
+ *   </li>
+ * </ul>
+ *
+ * <h3>Configuration Impact</h3>
+ * <ul>
+ *   <li><code>-c / --binary-comparison</code>: Enable full binary comparison mode</li>
+ *   <li><code>-C / --binary-comparison-instruction</code>: Enable instruction-only comparison mode</li>
+ *   <li>At least one flag must be set for this phase to run</li>
+ * </ul>
+ *
+ * <h3>Dependencies</h3>
+ * <ul>
+ *   <li><b>Platform</b>: Linux only (requires objdump utility)</li>
+ *   <li><b>External Tool</b>: objdump must be installed (usually from binutils package)</li>
+ *   <li>Must run AFTER MD5SumsPhase (needs DIFFERENT artifacts)</li>
+ *   <li>Should run AFTER TextFilesDiffsPhase</li>
+ * </ul>
+ *
+ * <h3>Performance Considerations</h3>
+ * <ul>
+ *   <li>Decompilation can be slow for large binaries</li>
+ *   <li>Diff generation can be memory-intensive</li>
+ *   <li>Large diffs (>200KB) are truncated to prevent report bloat</li>
+ * </ul>
+ *
+ * <h3>Common Use Cases</h3>
+ * <ul>
+ *   <li>Verifying compiled native libraries are identical</li>
+ *   <li>Detecting compiler flag changes</li>
+ *   <li>Identifying rebuild artifacts (same source, different build)</li>
+ *   <li>Debugging native code regressions</li>
+ * </ul>
+ *
+ * @see Status
+ * @see FileArtifact
+ * @see ProcessPhase
  */
 public class BinaryFilesDiffsPhase extends ProcessPhase {
 
@@ -219,15 +332,19 @@ public class BinaryFilesDiffsPhase extends ProcessPhase {
                     }
 
                     artifact.setTextDiff(diff_prettyHtml);
-                    artifact.setStatus(Status.DIFFERENT);
+                    LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Binary decompilation shows differences");
+                    artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
+                        "Binary files differ after objdump decompilation");
                 } else {
+                    LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Binary decompilation shows no differences");
                     artifact.setTextDiff(null);
-                    artifact.setStatus(Status.SAME);
+                    artifact.setStatus(Status.SAME, this.getClass().getSimpleName(),
+                        "Binary files are identical after objdump decompilation");
                 }
             } catch (IOException e) {
-                LOGGER.error(e.getMessage(), e);
+                LOGGER.error("Artifact '" + artifact.getRelativePath() + "': Error during binary comparison - " + e.getMessage(), e);
                 e.printStackTrace();
-                artifact.setStatus(Status.ERROR);
+                artifact.setStatus(Status.ERROR, this.getClass().getSimpleName(), "Error during binary comparison: " + e.getMessage());
             }
         }
     }

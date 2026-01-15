@@ -41,8 +41,8 @@
         <!-- Version 9.3 is the last version supporting JDK8 so we need to keep it as long as we still need JDK8 support -->
         <version.com-puppycrawl-tools.checkstyle>9.3</version.com-puppycrawl-tools.checkstyle>
 
-        <source.jdk>8</source.jdk>
-        <target.jdk>8</target.jdk>
+        <source.jdk>11</source.jdk>
+        <target.jdk>11</target.jdk>
         <maven.required.version>3.3.9</maven.required.version>
 
     </properties>

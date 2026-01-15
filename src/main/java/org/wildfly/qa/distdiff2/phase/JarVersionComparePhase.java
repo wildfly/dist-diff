@@ -21,12 +21,64 @@ import org.wildfly.qa.distdiff2.rpm.WrongImplementationVersionPresentException;
 import org.wildfly.qa.distdiff2.tools.Tools;
 
 /**
- * JarVersionComparePhase
- * <p>
- * Implementation of {@link ProcessPhase}, reads and compares version of jar file (version from file name)
- * Includes items which are {@link JarArtifact} and has
- * {@link Status#ADDED} or {@link Status#REMOVED} status
- * only.
+ * JarVersionComparePhase - JAR Version Matching and Comparison Phase
+ *
+ * <h3>Purpose</h3>
+ * This phase attempts to match JAR files that appear as ADDED in distribution B
+ * with REMOVED JAR files from distribution A, identifying version upgrades, build
+ * changes, or renamings. This prevents reporting version upgrades as separate
+ * additions and removals.
+ *
+ * <h3>Processing Logic</h3>
+ * <ol>
+ *   <li><b>Candidate Selection</b>: For each REMOVED JAR artifact:
+ *     <ol>
+ *       <li>Parse build information (name, version, build) from filename</li>
+ *       <li>Find ADDED artifacts in the same directory with matching characteristics</li>
+ *       <li>Filter candidates by: directory match → MD5 match → name match</li>
+ *     </ol>
+ *   </li>
+ *   <li><b>Version Comparison</b>: Compare major.minor.micro versions:
+ *     <ul>
+ *       <li>Same version → {@link Status#BUILD} (build number changed)</li>
+ *       <li>Different version → {@link Status#VERSION} (version upgraded/downgraded)</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>RPM-Aware Mode</b>: In RPM distributions, JAR filenames may differ from ZIP:
+ *     <ul>
+ *       <li>Translate ZIP filename to expected RPM filename using Implementation-Version</li>
+ *       <li>Check if RPM filename matches expectation</li>
+ *       <li>If match + same MD5 → SAME, if match + diff MD5 → DIFFERENT</li>
+ *     </ul>
+ *   </li>
+ * </ol>
+ *
+ * <h3>Status Transitions</h3>
+ * <table border="1">
+ *   <caption>Status transitions based on match characteristics</caption>
+ *   <tr><th>From Status</th><th>Condition</th><th>To Status</th></tr>
+ *   <tr><td>REMOVED + ADDED</td><td>Same name, same version, same build, RPM name matches, MD5 match</td><td>SAME</td></tr>
+ *   <tr><td>REMOVED + ADDED</td><td>Same name, same version, same build, RPM name matches, MD5 diff</td><td>DIFFERENT</td></tr>
+ *   <tr><td>REMOVED + ADDED</td><td>Same name, same version, different build</td><td>BUILD</td></tr>
+ *   <tr><td>REMOVED + ADDED</td><td>Same name, different version</td><td>VERSION</td></tr>
+ *   <tr><td>Any</td><td>Cannot parse Implementation-Version</td><td>ERROR</td></tr>
+ * </table>
+ *
+ * <h3>Configuration Impact</h3>
+ * <ul>
+ *   <li><code>rpmAware</code>: Enables RPM filename translation logic</li>
+ *   <li><code>zip-to-rpm-filename-mapping.properties</code>: Manual overrides for non-standard mappings</li>
+ * </ul>
+ *
+ * <h3>Dependencies</h3>
+ * <ul>
+ *   <li>Requires initial comparison (needs ADDED/REMOVED artifacts)</li>
+ *   <li>Should run BEFORE TextFilesDiffsPhase</li>
+ * </ul>
+ *
+ * @see JarArtifact
+ * @see Status
+ * @see ProcessPhase
  */
 public class JarVersionComparePhase extends ProcessPhase {
 
@@ -106,13 +158,45 @@ public class JarVersionComparePhase extends ProcessPhase {
     }
 
     /**
-     * Tries to find artifact with same name but different version or build. Basically iterates over artifacts that are
-     * marked as {@link Status#REMOVED} and then searches for matching artifacts that are marked as
-     * {@link Status#ADDED}.
+     * Attempts to match a REMOVED JAR artifact with a corresponding ADDED JAR artifact,
+     * identifying it as a version change, build change, or renaming rather than separate
+     * add/remove operations.
      *
-     * @param artifact                  target artifacts
-     * @param artifacts                 List of all artifacts
-     * @param filenameMappingExceptions List of artifacts that have manually set mapping to other artifact
+     * <h4>Algorithm</h4>
+     * <ol>
+     *   <li>Skip if artifact is not REMOVED (only process JARs missing from dist B)</li>
+     *   <li>Parse build information from artifact filename (name, version, build)</li>
+     *   <li>Find candidate matches in ADDED artifacts using progressive filtering:
+     *     <ol>
+     *       <li>Same parent directory path</li>
+     *       <li>If multiple: same MD5 sum (exact binary match)</li>
+     *       <li>If still multiple: same base name</li>
+     *     </ol>
+     *   </li>
+     *   <li>For each candidate, compare build information:
+     *     <ul>
+     *       <li>If base name matches: Standard version/build comparison</li>
+     *       <li>If base name differs: Try RPM filename translation (RPM mode only)</li>
+     *     </ul>
+     *   </li>
+     *   <li>Update artifact status based on match type (see class-level Javadoc)</li>
+     *   <li>Remove matched ADDED artifact from list (prevent duplicate matching)</li>
+     * </ol>
+     *
+     * <h4>RPM-Aware Mode Logic</h4>
+     * <p>In RPM distributions, JAR filenames often have version strings stripped. This method:
+     * <ul>
+     *   <li>Reads Implementation-Version from JAR manifest in distribution B</li>
+     *   <li>Strips that version from distribution A's filename to get expected RPM name</li>
+     *   <li>Compares expected name with actual distribution B filename</li>
+     *   <li>If match: Further compare MD5 to determine SAME vs DIFFERENT</li>
+     *   <li>If no match: Fall back to version/build comparison</li>
+     * </ul>
+     *
+     * @param artifact                  The REMOVED jar artifact to find a match for
+     * @param artifacts                 List of all JAR artifacts (both ADDED and REMOVED)
+     * @param all                       Complete list of all artifacts (for removal operations)
+     * @param filenameMappingExceptions Manual overrides for non-standard filename mappings
      */
     private void findVersionMatch(JarArtifact artifact, List<JarArtifact> artifacts, List<Artifact> all,
                                   Properties filenameMappingExceptions) {
@@ -132,6 +216,7 @@ public class JarVersionComparePhase extends ProcessPhase {
                 JarArtifact.BuildInformation inf2 = getBuildInformation(a);
                 if (inf2 != null) {
                     if (inf.getName().equals(inf2.getName())) {
+                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Found matching jar '" + a.getRelativePath() + "' with same base name '" + inf.getName() + "'");
                         artifact.setPathB(a.getPathB());
                         artifact.setBuildInformationB(a.getBuildInformationB());
                         if (distDiffConfiguration.isRpmAware()) {
@@ -141,49 +226,70 @@ public class JarVersionComparePhase extends ProcessPhase {
                                 expectedRPMName = translateToRPMName(artifact,
                                         filenameMappingExceptions);
                             } catch (NoImplementationVersionPresentException e) {
-                                context.handleError(new ErrorEvent("Jar " + artifact.getPathB()
+                                String errorMsg = "Jar " + artifact.getPathB()
                                         + " doesn't contain an Implementation-Version manifest attribute, dist-diff2 is unable "
-                                        + "to automatically find the mapping from zip-filename to rpm-filename. Consider specifying the mapping manually using zip-to-rpm-filename-mapping.properties.",
-                                        artifact));
-                                artifact.setStatus(ERROR);
+                                        + "to automatically find the mapping from zip-filename to rpm-filename. Consider specifying the mapping manually using zip-to-rpm-filename-mapping.properties.";
+                                LOGGER.error("Artifact '" + artifact.getRelativePath() + "': " + errorMsg);
+                                context.handleError(new ErrorEvent(errorMsg, artifact));
+                                artifact.setStatus(ERROR, this.getClass().getSimpleName(), "No Implementation-Version in manifest");
                                 all.remove(a);
                                 break;
                             } catch (WrongImplementationVersionPresentException ex) {
-                                context.handleError(new ErrorEvent("Jar " + artifact.getPathB()
+                                String errorMsg = "Jar " + artifact.getPathB()
                                         + " contains a probably invalid Implementation-Version manifest attribute (the value is "
                                         + ex.getVersion() + "), dist-diff2 is unable "
-                                        + "to automatically find the mapping from zip-filename to rpm-filename. Consider specifying the mapping manually using zip-to-rpm-filename-mapping.properties.",
-                                        artifact));
-                                artifact.setStatus(ERROR);
+                                        + "to automatically find the mapping from zip-filename to rpm-filename. Consider specifying the mapping manually using zip-to-rpm-filename-mapping.properties.";
+                                LOGGER.error("Artifact '" + artifact.getRelativePath() + "': " + errorMsg);
+                                context.handleError(new ErrorEvent(errorMsg, artifact));
+                                artifact.setStatus(ERROR, this.getClass().getSimpleName(), "Invalid Implementation-Version in manifest: " + ex.getVersion());
                                 all.remove(a);
                                 break;
                             }
                             LOGGER.debug("Translated ZIP-name to expected RPM-name: " + new File(
                                     artifact.getPathA()).getName() + " --> " + expectedRPMName);
                             if (filenameRPM.equals(expectedRPMName)) {
+                                LOGGER.info("Artifact '" + artifact.getRelativePath() + "': RPM filename matches expected (" + expectedRPMName + "), checking MD5");
                                 try {
                                     String md5sumA = Tools.calculateMD5(artifact.getPathA());
                                     String md5sumB = Tools.calculateMD5(artifact.getPathB());
                                     if (md5sumA.equals(md5sumB)) {
-                                        artifact.setStatus(Status.SAME);
+                                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': MD5 match - marking as SAME");
+                                        artifact.setStatus(Status.SAME, this.getClass().getSimpleName(),
+                                            "RPM filename matches and MD5 sums are identical");
                                     } else {
-                                        artifact.setStatus(Status.DIFFERENT);
+                                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': MD5 differs - marking as DIFFERENT");
+                                        artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
+                                            "RPM filename matches but MD5 sums differ (A=" + md5sumA + ", B=" + md5sumB + ")");
                                     }
                                     all.remove(a);
                                     break;
                                 } catch (Exception e) {
+                                    LOGGER.error("Artifact '" + artifact.getRelativePath() + "': Error calculating MD5 - " + e.getMessage(), e);
                                     e.printStackTrace();
-                                    artifact.setStatus(Status.ERROR);
+                                    artifact.setStatus(Status.ERROR, this.getClass().getSimpleName(), "Error calculating MD5: " + e.getMessage());
                                 }
                             } else {
-                                artifact.setStatus((isSameVersion(inf, inf2)) ? Status.BUILD
-                                        : Status.VERSION);
+                                boolean sameVersion = isSameVersion(inf, inf2);
+                                Status newStatus = sameVersion ? Status.BUILD : Status.VERSION;
+                                String reason = sameVersion ?
+                                    "Same version but different build: " + inf.getBuild() + " → " + inf2.getBuild() :
+                                    "Version changed from " + inf.getMajorVersion() + "." + inf.getMinorVersion() + "." + inf.getMicroVersion() +
+                                    " to " + inf2.getMajorVersion() + "." + inf2.getMinorVersion() + "." + inf2.getMicroVersion();
+                                LOGGER.info("Artifact '" + artifact.getRelativePath() + "': " + reason);
+                                artifact.setStatus(newStatus, this.getClass().getSimpleName(), reason);
                                 all.remove(a);
                                 break;
                             }
                         } else {
-                            artifact.setStatus(
-                                    (isSameVersion(inf, inf2)) ? Status.BUILD : Status.VERSION);
+                            // Non-RPM mode: simple version/build comparison
+                            boolean sameVersion = isSameVersion(inf, inf2);
+                            Status newStatus = sameVersion ? Status.BUILD : Status.VERSION;
+                            String reason = sameVersion ?
+                                "Same version but different build: " + inf.getBuild() + " → " + inf2.getBuild() :
+                                "Version changed from " + inf.getMajorVersion() + "." + inf.getMinorVersion() + "." + inf.getMicroVersion() +
+                                " to " + inf2.getMajorVersion() + "." + inf2.getMinorVersion() + "." + inf2.getMicroVersion();
+                            LOGGER.info("Artifact '" + artifact.getRelativePath() + "': " + reason);
+                            artifact.setStatus(newStatus, this.getClass().getSimpleName(), reason);
                             all.remove(a);
                             break;
                         }
@@ -205,23 +311,26 @@ public class JarVersionComparePhase extends ProcessPhase {
                                 + " / " + inf2.getName()
                                 + ", trying to translate zip->rpm names anyway");
                         if (filenameRPM.equals(expectedRPMName)) {
-                            LOGGER.info(
-                                    "Matched translated ZIP-name with expected RPM-name: " + new File(
-                                            artifact.getPathA()).getName() + " --> "
-                                            + expectedRPMName);
+                            LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Matched translated ZIP-name with expected RPM-name: " + new File(
+                                            artifact.getPathA()).getName() + " --> " + expectedRPMName);
                             try {
                                 String md5sumA = Tools.calculateMD5(artifact.getPathA());
                                 String md5sumB = Tools.calculateMD5(artifact.getPathB());
                                 if (md5sumA.equals(md5sumB)) {
-                                    artifact.setStatus(Status.SAME);
+                                    LOGGER.info("Artifact '" + artifact.getRelativePath() + "': MD5 match after RPM translation - marking as SAME");
+                                    artifact.setStatus(Status.SAME, this.getClass().getSimpleName(),
+                                        "RPM filename translation matched and MD5 sums are identical");
                                 } else {
-                                    artifact.setStatus(Status.DIFFERENT);
+                                    LOGGER.info("Artifact '" + artifact.getRelativePath() + "': MD5 differs after RPM translation - marking as DIFFERENT");
+                                    artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
+                                        "RPM filename translation matched but MD5 sums differ (A=" + md5sumA + ", B=" + md5sumB + ")");
                                 }
                                 all.remove(a);
                                 break;
                             } catch (Exception e) {
+                                LOGGER.error("Artifact '" + artifact.getRelativePath() + "': Error calculating MD5 after RPM translation - " + e.getMessage(), e);
                                 e.printStackTrace();
-                                artifact.setStatus(ERROR);
+                                artifact.setStatus(ERROR, this.getClass().getSimpleName(), "Error calculating MD5: " + e.getMessage());
                             }
                         }
                     }
