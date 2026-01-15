@@ -336,7 +336,7 @@ public class BinaryFilesDiffsPhase extends ProcessPhase {
                     artifact.setStatus(Status.DIFFERENT, this.getClass().getSimpleName(),
                         "Binary files differ after objdump decompilation");
                 } else {
-                    LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Binary decompilation shows no differences");
+                    LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': Binary decompilation shows no differences");
                     artifact.setTextDiff(null);
                     artifact.setStatus(Status.SAME, this.getClass().getSimpleName(),
                         "Binary files are identical after objdump decompilation");

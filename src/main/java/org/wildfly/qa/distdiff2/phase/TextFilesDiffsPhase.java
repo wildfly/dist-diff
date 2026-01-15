@@ -215,7 +215,7 @@ public class TextFilesDiffsPhase extends ProcessPhase {
                 i++;
             }
             if (onlyExpected) {
-                LOGGER.info("Artifact '" + artifact.getRelativePath() + "': module.xml contains only expected SNAPSHOT/version differences");
+                LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': module.xml contains only expected SNAPSHOT/version differences");
                 artifact.setStatus(Status.EXPECTED_DIFFERENCES, this.getClass().getSimpleName(),
                     "module.xml contains only expected redhat-SNAPSHOT to redhat-N version changes");
             }

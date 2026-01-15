@@ -216,7 +216,7 @@ public class JarVersionComparePhase extends ProcessPhase {
                 JarArtifact.BuildInformation inf2 = getBuildInformation(a);
                 if (inf2 != null) {
                     if (inf.getName().equals(inf2.getName())) {
-                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Found matching jar '" + a.getRelativePath() + "' with same base name '" + inf.getName() + "'");
+                        LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': Found matching jar '" + a.getRelativePath() + "' with same base name '" + inf.getName() + "'");
                         artifact.setPathB(a.getPathB());
                         artifact.setBuildInformationB(a.getBuildInformationB());
                         if (distDiffConfiguration.isRpmAware()) {
@@ -248,12 +248,12 @@ public class JarVersionComparePhase extends ProcessPhase {
                             LOGGER.debug("Translated ZIP-name to expected RPM-name: " + new File(
                                     artifact.getPathA()).getName() + " --> " + expectedRPMName);
                             if (filenameRPM.equals(expectedRPMName)) {
-                                LOGGER.info("Artifact '" + artifact.getRelativePath() + "': RPM filename matches expected (" + expectedRPMName + "), checking MD5");
+                                LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': RPM filename matches expected (" + expectedRPMName + "), checking MD5");
                                 try {
                                     String md5sumA = Tools.calculateMD5(artifact.getPathA());
                                     String md5sumB = Tools.calculateMD5(artifact.getPathB());
                                     if (md5sumA.equals(md5sumB)) {
-                                        LOGGER.info("Artifact '" + artifact.getRelativePath() + "': MD5 match - marking as SAME");
+                                        LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': MD5 match - marking as SAME");
                                         artifact.setStatus(Status.SAME, this.getClass().getSimpleName(),
                                             "RPM filename matches and MD5 sums are identical");
                                     } else {
@@ -311,13 +311,13 @@ public class JarVersionComparePhase extends ProcessPhase {
                                 + " / " + inf2.getName()
                                 + ", trying to translate zip->rpm names anyway");
                         if (filenameRPM.equals(expectedRPMName)) {
-                            LOGGER.info("Artifact '" + artifact.getRelativePath() + "': Matched translated ZIP-name with expected RPM-name: " + new File(
+                            LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': Matched translated ZIP-name with expected RPM-name: " + new File(
                                             artifact.getPathA()).getName() + " --> " + expectedRPMName);
                             try {
                                 String md5sumA = Tools.calculateMD5(artifact.getPathA());
                                 String md5sumB = Tools.calculateMD5(artifact.getPathB());
                                 if (md5sumA.equals(md5sumB)) {
-                                    LOGGER.info("Artifact '" + artifact.getRelativePath() + "': MD5 match after RPM translation - marking as SAME");
+                                    LOGGER.debug("Artifact '" + artifact.getRelativePath() + "': MD5 match after RPM translation - marking as SAME");
                                     artifact.setStatus(Status.SAME, this.getClass().getSimpleName(),
                                         "RPM filename translation matched and MD5 sums are identical");
                                 } else {
