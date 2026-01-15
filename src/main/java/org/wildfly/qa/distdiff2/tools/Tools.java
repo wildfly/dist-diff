@@ -177,7 +177,16 @@ public final class Tools {
         if (source != null) {
             for (Artifact artifact : source) {
                 if (!target.contains(artifact)) {
-                    artifact.setStatus(status);
+                    // Determine reason based on status
+                    String reason;
+                    if (status == Status.ADDED) {
+                        reason = "File exists in distribution B but not in A";
+                    } else if (status == Status.REMOVED) {
+                        reason = "File exists in distribution A but not in B";
+                    } else {
+                        reason = "File missing in target distribution";
+                    }
+                    artifact.setStatus(status, "InitialComparison", reason);
                     results.add(artifact);
                 }
             }
