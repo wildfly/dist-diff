@@ -8,16 +8,31 @@ Thank you for considering contributing to `wildfly/dist-diff`! This document des
 
 ## Table of Contents
 
-1. [Where to report issues and request features](#where-to-report-issues-and-request-features)
-2. [Setting up the development environment](#setting-up-the-development-environment)
-3. [Working with branches and pull requests](#working-with-branches-and-pull-requests)
-4. [Commit message format and sign-off](#commit-message-format-and-sign-off)
-5. [Code style and quality checks](#code-style-and-quality-checks)
-6. [Testing and local verification](#testing-and-local-verification)
-7. [Security reporting](#security-reporting)
-8. [License and copyright](#license-and-copyright)
+1. [Legal](#legal)
+2. [Where to report issues and request features](#where-to-report-issues-and-request-features)
+3. [Setting up the development environment](#setting-up-the-development-environment)
+4. [Working with branches and pull requests](#working-with-branches-and-pull-requests)
+5. [Commit message format and sign-off](#commit-message-format-and-sign-off)
+6. [Code style and quality checks](#code-style-and-quality-checks)
+7. [Testing and local verification](#testing-and-local-verification)
+8. [Security reporting](#security-reporting)
+9. [License and copyright](#license-and-copyright)
 
 ---
+
+
+## Legal
+
+All contributions to this repository are licensed under the [Apache License](https://www.apache.org/licenses/LICENSE-2.0), version 2.0 or later, or, if another license is specified as governing the file or directory being modified, such other license.
+
+All contributions are subject to the [Developer Certificate of Origin (DCO)](https://developercertificate.org/).
+The DCO text is also included verbatim in the [dco.txt](dco.txt) file in the root directory of the repository.
+
+### Compliance with Laws and Regulations
+
+All contributions must comply with applicable laws and regulations, including U.S. export control and sanctions restrictions.
+For background, see the Linux Foundation’s guidance:
+[Navigating Global Regulations and Open Source: US OFAC Sanctions](https://www.linuxfoundation.org/blog/navigating-global-regulations-and-open-source-us-ofac-sanctions).
 
 ## Where to report issues and request features
 
