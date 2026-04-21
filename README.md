@@ -166,8 +166,13 @@ Distribution is copied as `dist-diff2-$VERSION-jar-with-dependencies.jar` into y
  * For Java class decompilation process there is used [third-party library - CFR](http://www.benf.org/other/cfr/) as a maven dependency.
 
 ## Releasing a new version
-Please note that the prerequisite is to have read/write permission to the repo configured in `pom.xml` `scm` tag.
+Please note that the prerequisites are:
+- Read/write permission to the repo configured in `pom.xml` `scm` tag.
+- Git must be configured to GPG-sign commits (`git config commit.gpgsign true`). The maven-release-plugin creates commits that must be signed.
+- The `gpg-agent` must be running and your passphrase must be cached (e.g. by running `gpg --sign --detach-sign <file>` beforehand).
 
-1. `mvn release:clean`
-2. `mvn release:prepare` — if the process fails here, revert using `mvn release:rollback`.
-3. `mvn release:perform` — note that the `gpg-agent` must be running and your passphrase must be cached after running e.g. `gpg --sign --detach-sign <file>`.
+1. Create a new branch for the release (e.g. `git checkout -b release/x.y.z`).
+2. `mvn release:clean`
+3. `mvn release:prepare` — if the process fails here, revert using `mvn release:rollback`.
+4. `mvn release:perform`
+5. Create a pull request from the release branch to `main`.
